@@ -20,7 +20,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }} # AWS 리전 설정
+          aws-region: ${{ secrets.AWS_REGION_NAME }} # AWS 리전 설정
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -28,12 +28,12 @@ jobs:
 
       - name: Build Docker Image
         run: |
-            docker build --build-arg AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} --build-arg AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} --build-arg AWS_REGION_NAME=${{ secrets.AWS_REGION }} -t ssudobi-cache:latest .  
-            docker tag ssudobi-cache:latest ${{secrets.AWS_ACCOUNTID}}.dkr.ecr.${{secrets.AWS_REGION}}.amazonaws.com/lambda_ssudobi_cache:latest
+            docker build --build-arg AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} --build-arg AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} --build-arg AWS_REGION_NAME_NAME=${{ secrets.AWS_REGION_NAME }} -t ssudobi-cache:latest .  
+            docker tag ssudobi-cache:latest ${{secrets.AWS_ACCOUNTID}}.dkr.ecr.${{secrets.AWS_REGION_NAME}}.amazonaws.com/lambda_ssudobi_cache:latest
 
       - name: Push Docker Image to ECR
         run: |
-            docker push ${{secrets.AWS_ACCOUNTID}}.dkr.ecr.${{secrets.AWS_REGION}}.amazonaws.com/lambda_ssudobi_cache:latest
+            docker push ${{secrets.AWS_ACCOUNTID}}.dkr.ecr.${{secrets.AWS_REGION_NAME}}.amazonaws.com/lambda_ssudobi_cache:latest
       
         #   - name: Deploy ssudobi-cache function
         # run: |
