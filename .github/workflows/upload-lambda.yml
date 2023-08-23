@@ -1,41 +1,40 @@
-name: Upload Lambda Functions
+name: Build and Push Docker Image to ECR
 
 on:
   push:
+    paths-ignore:
+      - 's3/**'
     branches:
       - main
 
 jobs:
-  deploy_functions:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v2
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          python-version: 3.11
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }} # AWS 리전 설정
 
-      - name: Package and Deploy Lambda Functions
-        env:
-          AWS_REGION: ap-northeast-2
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build Docker Image
         run: |
-          for function_file in *.py; do
-            function_name=$(basename $function_file .py)
-            echo "Packaging and deploying $function_file to Lambda function $function_name"
-            # Install dependencies and package code
-            pip install -r requirements.txt -t .
-            zip -r function.zip ./*
-            # Create or update Lambda function
-            aws lambda create-function \
-              --function-name $function_name \
-              --runtime python3.11 \
-              --role $AWS_ROLE_ARN \
-              --handler $function_name.handler \
-              --zip-file fileb://function.zip
-          done
+            docker build --build-arg AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} --build-arg AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} --build-arg AWS_REGION_NAME=${{ secrets.AWS_REGION }} -t ssudobi-cache:latest .  
+            docker tag ssudobi-cache:latest ${{secrets.AWS_ACCOUNTID}}.dkr.ecr.${{secrets.AWS_REGION}}.amazonaws.com/lambda_ssudobi_cache:latest
+
+      - name: Push Docker Image to ECR
+        run: |
+            docker push ${{secrets.AWS_ACCOUNTID}}.dkr.ecr.${{secrets.AWS_REGION}}.amazonaws.com/lambda_ssudobi_cache:latest
+      
+        #   - name: Deploy ssudobi-cache function
+        # run: |
+        #    aws lambda update-function-code --function-name ssudobi-cache --image-uri ${AWS_ACCOUNT_ID}.dkr.ecr.your-region-name.amazonaws.com/your-repository-name-lambda1:latest
