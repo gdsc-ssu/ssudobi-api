@@ -39,7 +39,7 @@ def handler(event: dict, context: dict) -> dict | None:
     response = None
 
     try:
-        token = json.loads(event["body"]).get("token")  # 로그인 토큰 조회
+        token = event["token"]  # 로그인 토큰 조회
         assert token, "No token"
         res = asyncio.run(main(token))  # 예약 현황 조회
         s3 = boto3.client("s3")
