@@ -37,4 +37,4 @@ jobs:
       
       - name: Deploy ssudobi-cache function
         run: |
-            aws lambda update-function-code --function-name ssudobi_cache --image-uri  ${{secrets.AWS_ACCOUNTID}}.dkr.ecr.${{secrets.AWS_REGION_NAME}}.amazonaws.com/lambda_ssudobi_cache:latest
+           aws lambda update-function-code --function-name ssudobi_cache --image-uri ${{secrets.AWS_ACCOUNTID}}.dkr.ecr.${{secrets.AWS_REGION_NAME}}.amazonaws.com/lambda_ssudobi_cache:latest
