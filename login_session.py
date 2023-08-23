@@ -61,5 +61,5 @@ async def login(usaint_id: str, password: str) -> str:
 if __name__ == "__main__":
     import asyncio
 
-    res = asyncio.run(login("", "!"))
+    res = asyncio.run(login("20180806", "kidok0714!"))
     print(res)
