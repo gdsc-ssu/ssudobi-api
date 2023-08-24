@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 's3/**'
+      - '.github/**'
     branches:
       - main
 
