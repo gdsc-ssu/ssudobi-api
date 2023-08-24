@@ -40,16 +40,12 @@ def handler(event: dict, context: dict) -> dict | None:
 
     try:
         token = event["token"]  # 로그인 토큰 조회
-        assert token, "No token"
         res = asyncio.run(main(token))  # 예약 현황 조회
         s3 = boto3.client("s3")
         s3.put_object(
             Bucket="ssudobi-cache", Key="cache", Body=json.dumps(res)
         )  # 캐시 업데이트
         response = {"StatusCode": 200, "data": res}
-
-    except AssertionError as e:
-        response = {"StatusCode": 401, "error": str(e)}  # 로그인 정보 부족
 
     except Exception as e:
         response = {"StatusCode": 500, "error": str(e)}
@@ -62,6 +58,5 @@ if __name__ == "__main__":
     from login_session import login
 
     token = asyncio.run(login("20180806", "kidok0714!"))
-
     res = asyncio.run(main(token))
     print(res)

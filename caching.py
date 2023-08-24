@@ -1,9 +1,13 @@
 import asyncio
 import datetime as dt
+import json
+
 from datetime import datetime
 from functools import partial
 
 from aiohttp_retry import RetryClient
+
+# from exceptions import *
 
 
 async def call_api(retry_client: RetryClient, date: str, room_number: int) -> dict:
@@ -17,11 +21,11 @@ async def call_api(retry_client: RetryClient, date: str, room_number: int) -> di
         dict: 예약 현황 응답 객체
     """
     status_url = f"https://oasis.ssu.ac.kr/smufu-api/api/pc/rooms/{room_number}/reservations?date={date}"
-    # retry_client = await login_retry_client.create_retry_client(retry_client)
     async with retry_client.get(status_url) as resp:
-        resp = await resp.json()
+        resp_bytes = await resp.read()  # 응답 바이트를 읽음
+        json_data = json.loads(resp_bytes)  # 바이트를 json으로 변환
 
-    return resp
+    return json_data
 
 
 def parse_resravtion_status(res: dict) -> list | None:
@@ -40,12 +44,12 @@ def parse_resravtion_status(res: dict) -> list | None:
     str_to_datetime = lambda x: datetime.strptime(
         x, "%Y-%m-%d %H:%M:%S"
     )  # str -> datetime으로
+    code = res.get("code", "")  # 도서관 api의 자체 응답 코드
 
-    if (code := res.get("code")) == "success.noRecord":  # 어떠한 예약도 없는 경우
-        # print(f">>> Room has no reservation")
-        return None
+    if res.get("success") == False:  # 요청이 실패한 경우
+        raise ValueError(code)
 
-    elif code == "success.retrieved":  # 예약이 존재하는 경우
+    if code == "success.retrieved":  # 예약이 존재하는 경우
         reservation_list = res["data"]["list"]
         reserved_times = []
 
@@ -59,11 +63,7 @@ def parse_resravtion_status(res: dict) -> list | None:
             )  # 예약일이 오늘일 경우 현재 시간을 기준으로 한다
 
             reserved_times.append((start_hour, end_time.hour))  # 예약이 차있는 시간대 추출
-
-    else:
-        raise ValueError(">> Response doesn't have correct data")
-
-    return reserved_times
+        return reserved_times
 
 
 async def get_reservation_status(
@@ -85,8 +85,8 @@ async def get_reservation_status(
         reservation_status = parse_resravtion_status(response)  # 예약 정보 추출
         return reservation_status
 
-    except Exception as e:
-        print(e)
+    except asyncio.CancelledError:
+        print(f">> Canceled date:{date} room_number:{room_number}")
 
 
 async def get_all_rooms_reservation_status(
@@ -118,7 +118,7 @@ async def get_all_rooms_reservation_status(
         task.add_done_callback(call_back)  # 콜백 등록
         tasks.append(task)
 
-    await asyncio.gather(*tasks)  # 등록된 테스크 비동기 실행
+    await asyncio.gather(*tasks, return_exceptions=False)  # 등록된 테스크 비동기 실행
     return reservations_in_day
 
 
@@ -161,7 +161,7 @@ async def get_all_days_reservation_status(retry_client: RetryClient) -> dict:
 
 
 async def get_cache_data(retry_client: RetryClient):
-    # date = "2023-08-28"  # 조회 날짜
+    date = "2023-08-28"  # 조회 날짜
     # room_number = 1
     async with retry_client:
         # res = await get_reservation_status(retry_client, date, room_number)
