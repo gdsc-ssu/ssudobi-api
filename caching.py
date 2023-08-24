@@ -7,8 +7,6 @@ from functools import partial
 
 from aiohttp_retry import RetryClient
 
-# from exceptions import *
-
 
 async def call_api(retry_client: RetryClient, date: str, room_number: int) -> dict:
     """

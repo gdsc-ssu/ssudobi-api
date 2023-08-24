@@ -51,10 +51,10 @@ def handler(event: dict, context: dict) -> dict | None:
         response = {"StatusCode": 200, "data": res}
 
     except AssertionError as e:
-        response = {"StatusCode": 422, "error": str(e)}
+        response = {"StatusCode": 422, "error": str(e)}  # 엔티티 에러
 
     except Exception as e:
-        response = {"StatusCode": 500, "error": str(e)}
+        response = {"StatusCode": 500, "error": str(e)}  # 서버 자체 에러
 
     finally:
         return response
