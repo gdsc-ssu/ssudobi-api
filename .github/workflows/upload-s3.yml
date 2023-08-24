@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      working-directory: ./s3
 
     steps:
       - name: Checkout Repository
@@ -30,6 +32,7 @@ jobs:
         run: |
             docker build --build-arg AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} --build-arg AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} --build-arg AWS_REGION_NAME_NAME=${{ secrets.AWS_REGION_NAME }} -t ssudobi-s3:latest .  
             docker tag ssudobi-s3:latest ${{secrets.AWS_ACCOUNTID}}.dkr.ecr.${{secrets.AWS_REGION_NAME}}.amazonaws.com/lambda_ssudobi_s3:latest
+        working-directory: ${{env.working-directory}}
 
       - name: Push Docker Image to ECR
         run: |
