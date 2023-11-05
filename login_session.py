@@ -43,7 +43,7 @@ async def get_logined_session(token: str) -> aiohttp.ClientSession:
     return session
 
 
-async def login(usaint_id: str, password: str) -> str:
+async def login(usaint_id: str, password: str) -> dict:
     """
     로그인을 진행하고 인증 토큰을 발급합니다.
 
@@ -54,12 +54,8 @@ async def login(usaint_id: str, password: str) -> str:
     data = {"loginId": usaint_id, "password": password}
     async with aiohttp.ClientSession() as session:
         async with session.post(login_url, json=data) as resp:
-            access_token = (await resp.json())["data"]["accessToken"]  # 토큰 추출
-    return access_token
+            json_res = await resp.json()  # 토큰 추출
+    return json_res
 
 
-if __name__ == "__main__":
-    import asyncio
-
-    res = asyncio.run(login("20180806", "kidok0714!"))
-    print(f"login-token={res}")
+# if __name__ == "__main__":
