@@ -62,7 +62,7 @@ def handler(event: dict, context: dict) -> dict:
         student_id = body["student_id"]
         password = body["password"]
         res = asyncio.run(update_cache(student_id, password))  # 예약 현황 조회
-        # put_cache_s3(res)
+        put_cache_s3(res)
         response = create_response(200, json.dumps({"data": res}))
 
     except AssertionError as e:
