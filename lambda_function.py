@@ -58,11 +58,3 @@ def handler(event: dict, context: dict) -> dict | None:
 
     finally:
         return response
-
-
-if __name__ == "__main__":
-    from login_session import login
-
-    # token = asyncio.run(login("20180806", "kidok0714!"))
-    res = asyncio.run(main("token"))
-    # print(token)
