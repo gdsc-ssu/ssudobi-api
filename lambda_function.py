@@ -5,10 +5,10 @@ import boto3
 import json
 
 from caching import get_cache_data
-from login_session import get_logined_session, create_retry_client
+from login_session import *
 
 
-async def main(token: str) -> dict:
+async def update_cache(student_id: str, password: str) -> dict:
     """
     캐싱 로직을 전부 실행해 현재 예약 현황을 반환 합니다.
 
@@ -19,13 +19,32 @@ async def main(token: str) -> dict:
     Returns:
         dict:
     """
-    session = await get_logined_session(token)  # 로그인 및 세션 생성
+    session = await get_logined_session(student_id, password)  # 로그인 세션 생성
     retry_client = await create_retry_client(session)  # 세션에 retry 기능 추가
     cache_data = await get_cache_data(retry_client)  # 예약 현황 추출
+    await retry_client.close()
+
     return cache_data
 
 
-def handler(event: dict, context: dict) -> dict | None:
+def put_cache_s3(cache: dict):
+    s3 = boto3.client("s3")
+    s3.put_object(
+        Bucket="ssudobi-cache", Key="cache", Body=json.dumps(cache)
+    )  # 캐시 업데이트
+
+
+def create_response(status_code: str | int, msg: str) -> dict:
+    response = {
+        "isBase64Encoded": False,
+        "headers": {"Content-Type": "application/json"},
+        "statusCode": status_code,
+        "body": msg,
+    }
+    return response
+
+
+def handler(event: dict, context: dict) -> dict:
     """
     캐싱 람다 함수를 호출 합니다.
 
@@ -36,25 +55,21 @@ def handler(event: dict, context: dict) -> dict | None:
     Returns:
         dict: 람다 함수 실행 결과 값
     """
-    response = None
+    response = create_response(200, "empty")
 
     try:
-        token = event.get("token")  # 로그인 토큰 조회
-        if not token:
-            raise AssertionError("Token is not passed")  # 토큰이 없는 경우
-
-        res = asyncio.run(main(token))  # 예약 현황 조회
-        s3 = boto3.client("s3")
-        s3.put_object(
-            Bucket="ssudobi-cache", Key="cache", Body=json.dumps(res)
-        )  # 캐시 업데이트
-        response = {"StatusCode": 200, "data": res}
+        body = json.loads(event["body"])
+        student_id = body["student_id"]
+        password = body["password"]
+        res = asyncio.run(update_cache(student_id, password))  # 예약 현황 조회
+        # put_cache_s3(res)
+        response = create_response(200, json.dumps({"data": res}))
 
     except AssertionError as e:
-        response = {"StatusCode": 422, "error": str(e)}  # 엔티티 에러
+        response = create_response(401, json.dumps({"data": str(e)}))
 
     except Exception as e:
-        response = {"StatusCode": 500, "error": str(e)}  # 서버 자체 에러
+        response = create_response(500, json.dumps({"data": str(e)}))
 
     finally:
         return response

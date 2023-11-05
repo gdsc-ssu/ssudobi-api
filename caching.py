@@ -82,7 +82,7 @@ async def get_reservation_status(
         return reservation_status
 
     except asyncio.CancelledError:
-        print(f">> Canceled date:{date} room_number:{room_number}")
+        print(f">> Canceled date:{date} room_number:{room_number}")  # 실행중 에러가 발생한 경우
 
 
 async def get_all_rooms_reservation_status(
@@ -154,7 +154,7 @@ async def get_all_days_reservation_status(retry_client: RetryClient) -> dict:
 
 
 async def get_cache_data(retry_client: RetryClient):
-    date = "2023-08-28"  # 조회 날짜
+    # date = "2023-08-28"  # 조회 날짜
     # room_number = 1
     async with retry_client:
         # res = await get_reservation_status(retry_client, date, room_number)
