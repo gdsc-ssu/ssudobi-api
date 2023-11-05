@@ -1,6 +1,5 @@
 import asyncio
 import datetime as dt
-import json
 
 from datetime import datetime
 from functools import partial
@@ -20,8 +19,7 @@ async def call_api(retry_client: RetryClient, date: str, room_number: int) -> di
     """
     status_url = f"https://oasis.ssu.ac.kr/smufu-api/api/pc/rooms/{room_number}/reservations?date={date}"
     async with retry_client.get(status_url) as resp:
-        resp_bytes = await resp.read()  # 응답 바이트를 읽음
-        json_data = json.loads(resp_bytes)  # 바이트를 json으로 변환
+        json_data = await resp.json(content_type=None)  # 응답 바이트를 읽음
 
     return json_data
 
@@ -80,7 +78,7 @@ async def get_reservation_status(
     """
     try:
         response: dict = await call_api(retry_client, date, room_number)  # api 호출 값
-        reservation_status = parse_resravtion_status(response)  # 예약 정보 추출
+        reservation_status: list | None = parse_resravtion_status(response)  # 예약 정보 추출
         return reservation_status
 
     except asyncio.CancelledError:
@@ -102,7 +100,7 @@ async def get_all_rooms_reservation_status(
     semina_room_numbers = [1, 2, 3, 4, 5, 6, 7, 9]
     opend_room_numbers = [18, 21, 22, 23, 24, 25, 26]
     all_room_numbers = semina_room_numbers + opend_room_numbers
-    reservations_in_day = {i: None for i in all_room_numbers}  # 하루동안의 총 예약
+    reservations_in_day = {}  # 하루동안의 총 예약
 
     def update_res(task: asyncio.Task, room_number: int):
         reservations_in_day[room_number] = task.result()  # task의 실행 결과를 기록한다
@@ -135,25 +133,22 @@ async def get_all_days_reservation_status(retry_client: RetryClient) -> dict:
     """
     now_date = datetime.today()
     MAX_RESERVATION_DAY = 14  # 최대 예약 가능 시점은 현재부터 14일 뒤까지
-    day_count = 0  # 사용 가능 일수
+    available_day_count = 0  # 사용 가능 일수
+    day_diff = iter(range(30))  # 최대 일자 탐색 범위
     result = {}
-    for delta in range(30):  # 한달을 조회하면 사용 가능일 수 14일은 필연적으로 채운다 (무한루프 대용)
-        current_date = now_date + dt.timedelta(days=delta)
-
+    while available_day_count < MAX_RESERVATION_DAY:  # 사용 가능일이 14일을 넘으면 종료
+        current_date = now_date + dt.timedelta(days=next(day_diff))  # 하루 씩 이동
         day = current_date.weekday()  # 요일 추출
-        if day >= 5:  # 주말인 경우 예약 불가함으로 패스한다 토:5  일:6
+        if day > 5:  #  토:5  일:6 방학에는 주말 양일 이용이 불가하고 학기 중에는 일요일만 예약이 불가하다.
             continue
 
         current_date_str = current_date.strftime("%Y-%m-%d")
-
         all_reservation_status = await get_all_rooms_reservation_status(
             retry_client, current_date_str  # 오늘 날짜
         )  # 모든 예약 현황
 
         result[current_date_str] = all_reservation_status
-
-        if (day_count := day_count + 1) == MAX_RESERVATION_DAY:  # 사용 가능일이 14일을 넘으면 종료
-            break
+        available_day_count += 1
 
     return result
 
@@ -166,7 +161,3 @@ async def get_cache_data(retry_client: RetryClient):
         # res = await get_all_rooms_reservation_status(retry_client, date)
         res = await get_all_days_reservation_status(retry_client)
     return res
-
-
-# if __name__ == "__main__":
-# asyncio.run(get_cache_data())

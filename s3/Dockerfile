@@ -1,5 +1,9 @@
 FROM public.ecr.aws/lambda/python:3.10
 
+
+#Set timezone as Seoul
+ENV TZ=Asia/Seoul
+
 # Copy requirements.txt
 COPY requirements.txt ${LAMBDA_TASK_ROOT}
 
