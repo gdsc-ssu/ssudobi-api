@@ -22,40 +22,29 @@ async def create_retry_client(session: aiohttp.ClientSession) -> RetryClient:
     return retry_client
 
 
-async def get_logined_session(token: str) -> aiohttp.ClientSession:
-    """
-    로그인이 반영된 비동기 세션을 생성 합니다.
-
-    Returns:
-        ClientSession: 로그인 처리가 완료된 세션
-    """
-    session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3))  # 세션 생성
-    try:
-        headers = {
-            "Accept": "application/json, text/plain, */*",
-            "pyxis-auth-token": token,
-        }
-        session.headers.update(headers)
-
-    except KeyError as e:
-        raise KeyError(f">> Login failed {e}")
-
-    return session
-
-
-async def login(usaint_id: str, password: str) -> dict:
+async def get_logined_session(usaint_id: str, password: str) -> aiohttp.ClientSession:
     """
     로그인을 진행하고 인증 토큰을 발급합니다.
 
     Returns:
         str: 인증 토큰 값
     """
-    login_url = "https://oasis.ssu.ac.kr/pyxis-api/api/login"  # 로그인 api
-    data = {"loginId": usaint_id, "password": password}
-    async with aiohttp.ClientSession() as session:
+    session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3))
+    try:
+        login_url = "https://oasis.ssu.ac.kr/pyxis-api/api/login"  # 로그인 api
+        data = {"loginId": usaint_id, "password": password}
         async with session.post(login_url, json=data) as resp:
             json_res = await resp.json()  # 토큰 추출
-    return json_res
 
+        assert json_res["code"] == "success.loggedIn", "Login Failed"  # 로그인 검증
 
-# if __name__ == "__main__":
+        headers = {
+            "Accept": "application/json, text/plain, */*",
+            "pyxis-auth-token": json_res["data"]["accessToken"],
+        }
+        session.headers.update(headers)
+        return session
+
+    except AssertionError as e:
+        await session.close()
+        raise e
