@@ -1,12 +1,13 @@
+import asyncio
+from dataclasses import dataclass, field
 import datetime
 
-from login_session import *
+from aiohttp_retry import RetryClient
 
-from dataclasses import dataclass, field
+from login_session import get_logined_session
 
 
 HOLIDAY = 5
-
 SEMINA_ROOMS = (1, 2, 3, 4, 5, 6, 7, 9)
 OPEN_SEMINA_ROOMS = (18, 21, 22, 23, 24, 25, 26)
 
@@ -31,11 +32,10 @@ class DateReservations:
         self.data = {x: [] for x in self.init_data()}
 
 
-def call_api(session: requests.Session, room_type_id: int, date: str) -> dict:
-    url = f"https://oasis.ssu.ac.kr/pyxis-api/1/api/rooms?roomTypeId={room_type_id}&smufMethodCode=PC&hopeDate={date}"
-    response = session.get(url)
-    response.raise_for_status()
-    response = response.json()
+async def call_api(session: RetryClient, room_type_id: int, date: str) -> dict:
+    url = f"/pyxis-api/1/api/rooms?roomTypeId={room_type_id}&smufMethodCode=PC&hopeDate={date}"
+    async with session.get(url, raise_for_status=True) as response:
+        response = await response.json()
 
     code = response.get("code", "")  # 도서관 api의 자체 응답 코드
     if response.get("success") == False:  # 요청이 실패한 경우
@@ -93,8 +93,8 @@ def parse_resravtions(room_type_id: int, response: dict) -> DateReservations:
     return date_reservations
 
 
-def get_date_reservations(
-    session: requests.Session,
+async def get_date_reservations(
+    session: RetryClient,
     room_type_id: int,
     date: str,
 ) -> DateReservations | None:
@@ -110,7 +110,7 @@ def get_date_reservations(
         dict: 예약현황
     """
     try:
-        response = call_api(session, room_type_id, date)
+        response = await call_api(session, room_type_id, date)
         date_reservations = parse_resravtions(room_type_id, response)
         return date_reservations
 
@@ -120,7 +120,7 @@ def get_date_reservations(
         )  # 실행중 에러가 발생한 경우
 
 
-def get_all_date_reservations(session: requests.Session, room_type_id: int):
+async def get_all_date_reservations(session: RetryClient, room_type_id: int):
     #     """
     #     모든 날짜와 모든 세미나 실의 예약 현황을 조회해 현재의 예약 현황을 반환 합니다.
     #     예약 조회는 예약 가능일 기준 14일을 조회하며 이후는 조회를 하여도 예약이 불가하기 때문에 조회하지 않습니다.
@@ -137,7 +137,7 @@ def get_all_date_reservations(session: requests.Session, room_type_id: int):
     MAX_RESERVATION_DAY = 15  # 최대 예약 가능 시점은 현재부터 14일 뒤까지
     available_day_count = 0  # 사용 가능 일수
     day_diff = iter(range(30))  # 최대 일자 탐색 범위
-    results = []
+    tasks = []
     while available_day_count < MAX_RESERVATION_DAY:  # 사용 가능일이 14일을 넘으면 종료
         current_date = now_date + datetime.timedelta(
             days=next(day_diff)
@@ -149,31 +149,26 @@ def get_all_date_reservations(session: requests.Session, room_type_id: int):
             continue
 
         current_date_str = current_date.strftime("%Y-%m-%d")
-        date_reservations = get_date_reservations(
-            session, room_type_id, current_date_str
+        task = asyncio.create_task(
+            get_date_reservations(session, room_type_id, current_date_str)
         )
-
-        results.append(date_reservations)
+        tasks.append(task)
         available_day_count += 1
 
+    results = await asyncio.gather(*tasks)
     return results
 
 
-# async def get_cache_data(token: str):
-#     # date = "2023-08-28"  # 조회 날짜
-#     # room_number = 1
-#     session = await get_logined_session(token)
-#     retry_client = await create_retry_client(session)
-
-#     async with retry_client:
-#         res = await get_date_reservations(retry_client, date, room_number)
-#         # res = await get_all_rooms_reservation_status(retry_client, date)
-#         # res = await get_all_days_reservation_status(retry_client)
-#     return res
+async def get_cache_data(token: str):
+    date = "2024-04-18"  # 조회 날짜
+    room_number = 1
+    session = await get_logined_session(token)
+    # res = await get_date_reservations(session, room_number, date)
+    res = await get_all_date_reservations(session, 1)
+    print(res)
+    await session.close()
 
 
 if __name__ == "__main__":
     token = "uf4asg5stjdt1das3h54m0ivo9kmulv3"
-    session = get_logined_session(token)
-    # print(get_date_reservations(session, 1, "2024-04-18"))
-    print(get_all_date_reservations(session, 1))
+    asyncio.run(get_cache_data(token))
