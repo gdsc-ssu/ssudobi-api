@@ -1,3 +1,5 @@
+import requests
+
 import aiohttp
 from aiohttp_retry import RetryClient, ExponentialRetry
 
@@ -22,29 +24,22 @@ async def create_retry_client(session: aiohttp.ClientSession) -> RetryClient:
     return retry_client
 
 
-async def get_logined_session(usaint_id: str, password: str) -> aiohttp.ClientSession:
+def get_logined_session(token: str) -> requests.Session:
     """
     로그인을 진행하고 인증 토큰을 발급합니다.
 
     Returns:
         str: 인증 토큰 값
     """
-    session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3))
+    session = requests.Session()
     try:
-        login_url = "https://oasis.ssu.ac.kr/pyxis-api/api/login"  # 로그인 api
-        data = {"loginId": usaint_id, "password": password}
-        async with session.post(login_url, json=data) as resp:
-            json_res = await resp.json()  # 토큰 추출
-
-        assert json_res["code"] == "success.loggedIn", "Login Failed"  # 로그인 검증
-
         headers = {
             "Accept": "application/json, text/plain, */*",
-            "pyxis-auth-token": json_res["data"]["accessToken"],
+            "Pyxis-Auth-Token": token,
         }
         session.headers.update(headers)
         return session
 
     except AssertionError as e:
-        await session.close()
+        session.close()
         raise e
