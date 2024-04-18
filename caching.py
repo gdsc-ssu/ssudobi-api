@@ -4,7 +4,7 @@ import datetime
 
 from aiohttp_retry import RetryClient
 
-from login_session import get_logined_session
+from api import create_logined_session, call_api
 
 
 HOLIDAY = 5
@@ -32,21 +32,6 @@ class DateReservations:
         self.data = {x: [] for x in self.init_data()}
 
 
-async def call_api(session: RetryClient, room_type_id: int, date: str) -> dict:
-    url = f"/pyxis-api/1/api/rooms?roomTypeId={room_type_id}&smufMethodCode=PC&hopeDate={date}"
-    async with session.get(url, raise_for_status=True) as response:
-        response = await response.json()
-
-    code = response.get("code", "")  # 도서관 api의 자체 응답 코드
-    if response.get("success") == False:  # 요청이 실패한 경우
-        raise ValueError(code)
-
-    if code == "success.retrieved":  # 예약 데이터가 존재하는 경우
-        return response
-    else:
-        raise ValueError(f"Request gor wrong {code}")
-
-
 def parse_resravtions(room_type_id: int, response: dict) -> DateReservations:
     """
     json 데이터를 파싱해 시간대 별 예약 가능 여부를 갖고 있는 불리언 딕셔너리를 생성합니다.
@@ -68,7 +53,7 @@ def parse_resravtions(room_type_id: int, response: dict) -> DateReservations:
     for room in room_reservations:
         room_id: int = room["id"]
         room_time_lines = room["timeLine"]
-        begin_hour = None
+        begin_hour = None  # 예약 시작 시간
 
         for time_line in room_time_lines:
             minutes: list[dict] = time_line["minutes"]
@@ -114,31 +99,45 @@ async def get_date_reservations(
         date_reservations = parse_resravtions(room_type_id, response)
         return date_reservations
 
-    except Exception:
-        print(
-            f">> Canceled date:{date} room_number:{room_type_id}"
-        )  # 실행중 에러가 발생한 경우
+    except ValueError:
+        raise ValueError(f"Bad request date:{date} room_type:{room_type_id}")
+
+    except TypeError:
+        raise TypeError(f"Bad response date:{date} room_type:{room_type_id}")
+
+    except KeyError:
+        raise KeyError(f"Bad key in parse date:{date} room_type:{room_type_id}")
 
 
 async def get_all_date_reservations(session: RetryClient, room_type_id: int):
-    #     """
-    #     모든 날짜와 모든 세미나 실의 예약 현황을 조회해 현재의 예약 현황을 반환 합니다.
-    #     예약 조회는 예약 가능일 기준 14일을 조회하며 이후는 조회를 하여도 예약이 불가하기 때문에 조회하지 않습니다.
-    #     사용 가능일은 기준으로 하기 때문에 주말과 공휴일은 포함되지 않습니다.
-    #     #TODO 공휴일 지원안됨
+    """
+    모든 날짜와 모든 세미나 실의 예약 현황을 조회해 현재의 예약 현황을 반환 합니다.
+    예약 조회는 예약 가능일 기준 14일을 조회하며 이후는 조회를 하여도 예약이 불가하기 때문에 조회하지 않습니다.
+    사용 가능일은 기준으로 하기 때문에 휴관일과 공휴일은 포함되지 않습니다.
+    #TODO 공휴일 지원안됨
 
-    #     Args:
-    #         retry_client (RetryClient): 세션 객체
+    Args:
+        retry_client (RetryClient): 세션 객체
 
-    #     Returns:
-    #         dict: 모든 날짜 모든 세미나 실의 예약 현황 객체를 반환 합니다.
-    #     """
+    Returns:
+        dict: 모든 날짜 모든 세미나 실의 예약 현황 객체를 반환 합니다.
+    """
     now_date = datetime.datetime.today()
-    MAX_RESERVATION_DAY = 15  # 최대 예약 가능 시점은 현재부터 14일 뒤까지
+
+    if room_type_id == 1:
+        max_resvation_range = 15  # 최대 예약 가능 시점은 오늘부터 14일 뒤까지
+
+    elif room_type_id == 5:
+        max_resvation_range = 6  # 개방형인 경우에는 오늘부터 5일
+
     available_day_count = 0  # 사용 가능 일수
-    day_diff = iter(range(30))  # 최대 일자 탐색 범위
+
+    # 주말이나 공휴일 등이 탐색 범위에 포함될 수 있다.
+    # 예약 가능 14일, 5일을 찾기 위해선 좀 더 탐색할 필요가 존재한다.
+    day_diff = iter(range(max_resvation_range + 10))  # 최대 일자 탐색 범위
     tasks = []
-    while available_day_count < MAX_RESERVATION_DAY:  # 사용 가능일이 14일을 넘으면 종료
+
+    while available_day_count < max_resvation_range:  # 사용 가능일이 14일을 넘으면 종료
         current_date = now_date + datetime.timedelta(
             days=next(day_diff)
         )  # 하루 씩 이동
@@ -155,16 +154,16 @@ async def get_all_date_reservations(session: RetryClient, room_type_id: int):
         tasks.append(task)
         available_day_count += 1
 
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     return results
 
 
 async def get_cache_data(token: str):
-    date = "2024-04-18"  # 조회 날짜
-    room_number = 1
-    session = await get_logined_session(token)
-    # res = await get_date_reservations(session, room_number, date)
-    res = await get_all_date_reservations(session, 1)
+    # date = "2024-04-18"  # 조회 날짜
+    room_type_id = 5
+    session = await create_logined_session(token)
+    # res = await get_date_reservations(session, room_type_id, date)
+    res = await get_all_date_reservations(session, room_type_id)
     print(res)
     await session.close()
 

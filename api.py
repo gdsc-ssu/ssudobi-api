@@ -31,7 +31,7 @@ def create_retry_client(func) -> typing.Callable:
 
 
 @create_retry_client
-async def get_logined_session(token: str) -> aiohttp.ClientSession:
+async def create_logined_session(token: str) -> aiohttp.ClientSession:
     """
     로그인이 반영된 비동기 세션을 생성 합니다.
     Returns:
@@ -52,3 +52,21 @@ async def get_logined_session(token: str) -> aiohttp.ClientSession:
 
     except aiohttp.ClientConnectionError as e:
         raise aiohttp.ClientConnectionError(f"Can't conenct {url}")
+
+
+async def call_api(session: RetryClient, room_type_id: int, date: str) -> dict:
+    url = f"/pyxis-api/1/api/rooms?roomTypeId={room_type_id}&smufMethodCode=PC&hopeDate={date}"
+    async with session.get(url, raise_for_status=True) as response:
+        try:
+            response = await response.json()
+            code = response.get("code", "")  # 도서관 api의 자체 응답 코드
+
+            if (
+                response.get("success") and code == "success.retrieved"
+            ):  # 예약 데이터가 존재하는 경우
+                return response
+
+            raise ValueError(code)
+
+        except aiohttp.ContentTypeError:
+            raise TypeError("Response Type is not valid")
