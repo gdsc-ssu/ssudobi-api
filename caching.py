@@ -109,7 +109,7 @@ async def get_date_reservations(
         raise KeyError(f"Bad key in parse date:{date} room_type:{room_type_id}")
 
 
-async def get_all_date_reservations(session: RetryClient, room_type_id: int):
+async def get_all_date_reservations(session: RetryClient, room_type_id: int) -> dict:
     """
     모든 날짜와 모든 세미나 실의 예약 현황을 조회해 현재의 예약 현황을 반환 합니다.
     예약 조회는 예약 가능일 기준 14일을 조회하며 이후는 조회를 하여도 예약이 불가하기 때문에 조회하지 않습니다.
@@ -141,6 +141,7 @@ async def get_all_date_reservations(session: RetryClient, room_type_id: int):
         current_date = now_date + datetime.timedelta(
             days=next(day_diff)
         )  # 하루 씩 이동
+        print(current_date)
         day = current_date.weekday()  # 요일 추출
         if (
             day > HOLIDAY
@@ -154,7 +155,17 @@ async def get_all_date_reservations(session: RetryClient, room_type_id: int):
         tasks.append(task)
         available_day_count += 1
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    results = create_results(await asyncio.gather(*tasks, return_exceptions=True))
+    return results
+
+
+def create_results(
+    reservations: list[DateReservations | BaseException],
+) -> dict:
+    results = {}
+    for reserv in reservations:
+        if isinstance(reserv, DateReservations):
+            results[reserv.date] = reserv.data
     return results
 
 
@@ -166,6 +177,7 @@ async def get_cache_data(token: str):
     res = await get_all_date_reservations(session, room_type_id)
     print(res)
     await session.close()
+    return res
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ def create_retry_client(func) -> typing.Callable:
     async def wrapper(*args, **kwargs) -> RetryClient:
         session: aiohttp.ClientSession = await func(*args, **kwargs)
         retry_options = ExponentialRetry(
-            attempts=3, statuses={401, 403, 404, 408, 429}
+            attempts=3, statuses={400, 401, 403, 404, 408, 429}
         )  # 리퀘스트가 너무 많은 경우, 연결 시간이 너무 긴 경우
         retry_client = RetryClient(
             raise_for_status=True, retry_options=retry_options, client_session=session
@@ -31,32 +31,50 @@ def create_retry_client(func) -> typing.Callable:
 
 
 @create_retry_client
-async def create_logined_session(token: str) -> aiohttp.ClientSession:
+async def create_logined_session(
+    student_id: str, usaint_secret: str
+) -> aiohttp.ClientSession:
     """
-    로그인이 반영된 비동기 세션을 생성 합니다.
+    로그인을 진행하고 인증 토큰을 발급합니다.
+
     Returns:
-        ClientSession: 로그인 처리가 완료된 세션
+        str: 인증 토큰 값
     """
 
-    url = "https://oasis.ssu.ac.kr"
+    session = aiohttp.ClientSession(
+        base_url="https://oasis.ssu.ac.kr",
+        timeout=aiohttp.ClientTimeout(total=10),
+        raise_for_status=True,
+    )
 
     try:
+        login_url = "/pyxis-api/api/login"  # 로그인 api
+        payload = {
+            "loginId": student_id,
+            "password": usaint_secret,
+            "isFamilyLogin": False,
+            "isMobile": False,
+        }
+        async with session.post(login_url, json=payload) as resp:
+            json_res = await resp.json()  # 토큰 추출
+
+        assert json_res["code"] == "success.loggedIn", "Login Failed"  # 로그인 검증
+
         headers = {
             "Accept": "application/json, text/plain, */*",
-            "pyxis-auth-token": token,
+            "pyxis-auth-token": json_res["data"]["accessToken"],
         }
-        session = aiohttp.ClientSession(
-            base_url=url, headers=headers, timeout=aiohttp.ClientTimeout(total=3)
-        )  # 세션 생성
+        session.headers.update(headers)
         return session
 
-    except aiohttp.ClientConnectionError as e:
-        raise aiohttp.ClientConnectionError(f"Can't conenct {url}")
+    except AssertionError as e:
+        await session.close()
+        raise e
 
 
 async def call_api(session: RetryClient, room_type_id: int, date: str) -> dict:
     url = f"/pyxis-api/1/api/rooms?roomTypeId={room_type_id}&smufMethodCode=PC&hopeDate={date}"
-    async with session.get(url, raise_for_status=True) as response:
+    async with session.get(url) as response:
         try:
             response = await response.json()
             code = response.get("code", "")  # 도서관 api의 자체 응답 코드
