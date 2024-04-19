@@ -4,7 +4,7 @@ import datetime
 
 from aiohttp_retry import RetryClient
 
-from api import create_logined_session, call_api
+from api import create_logined_session, call_reservation_api
 
 
 HOLIDAY = 5
@@ -14,7 +14,8 @@ OPEN_SEMINA_ROOMS = (18, 21, 22, 23, 24, 25, 26)
 
 @dataclass
 class DateReservations:
-    def init_data(self):
+    # 예약 정보 저장을 위한 클래스
+    def init_room_number(self):
         if self.room_type_id == 1:
             return SEMINA_ROOMS
         elif self.room_type_id == 5:
@@ -29,20 +30,19 @@ class DateReservations:
     data: dict[int, list[tuple]] = field(default_factory=dict)
 
     def __post_init__(self):  # 값 초기화
-        self.data = {x: [] for x in self.init_data()}
+        self.data = {
+            x: [] for x in self.init_room_number()
+        }  # 룸 타입에 맞게 방 번호 초기화
 
 
 def parse_resravtions(room_type_id: int, response: dict) -> DateReservations:
     """
-    json 데이터를 파싱해 시간대 별 예약 가능 여부를 갖고 있는 불리언 딕셔너리를 생성합니다.
+    json 데이터를 파싱해 방 별로 예약이 존재하는 시간 들을 반환합니다.
+    (10,13) => 10 ~ 13시까지 예약이 존재
 
     Args:
-        time_table (dict): 예약 가능 시간 테이블
-        res (requests.Response): 예약 조회 api 응답 결과
-
-    Returns:
-        dict: True인 경우 해당 시간대에 예약 가능을 의미하고 False인 경우 예약 불가능을 의미합니다.
-            ex) {10: True, 11: True, 12: True, 13: True, 14: True, 15: True, 16: True, 17: True, 18: True}
+        room_type_id (int): 룸 타입
+        response(dict): 예약 현황 정보
 
     """
 
@@ -84,18 +84,23 @@ async def get_date_reservations(
     date: str,
 ) -> DateReservations | None:
     """
-    해당일의 세미나실 예약 현황을 반환한다
+    특정 세미나실의 1일간 예약 정보를 반환한다.
 
     Args:
-        sess (RetryClient): 세션
-        date (str): 날짜
-        room_number (int): 방 번호
+        session (RetryClient): 세션
+        room_type_id (int): 룸 타입 번호
+        date (str): 일자
+
+    Raises:
+        ValueError: 리퀘스트가 잘못 요청된 경우
+        TypeError: 리스폰스가 잘못 온 경우
+        KeyError: 파싱이 잘못된 경우
 
     Returns:
-        dict: 예약현황
+        DateReservations | None: 예약 정보
     """
     try:
-        response = await call_api(session, room_type_id, date)
+        response = await call_reservation_api(session, room_type_id, date)
         date_reservations = parse_resravtions(room_type_id, response)
         return date_reservations
 
@@ -109,6 +114,26 @@ async def get_date_reservations(
         raise KeyError(f"Bad key in parse date:{date} room_type:{room_type_id}")
 
 
+def create_results(
+    reservations: list[DateReservations | BaseException],
+) -> dict:
+    """
+    예약 정보에서 예외를 제거하고 필요한 결과만 반환한다.
+    이후 날짜를 키로 하는 딕셔너리 형태의 데이터로 변환해 전송한다.
+
+    Args:
+        reservations (list[DateReservations  |  BaseException]): 예약 정보
+
+    Returns:
+        dict: 날짜 별 예약 데이터
+    """
+    results = {}
+    for reserv in reservations:
+        if isinstance(reserv, DateReservations):
+            results[reserv.date] = reserv.data
+    return results
+
+
 async def get_all_date_reservations(session: RetryClient, room_type_id: int) -> dict:
     """
     모든 날짜와 모든 세미나 실의 예약 현황을 조회해 현재의 예약 현황을 반환 합니다.
@@ -117,7 +142,9 @@ async def get_all_date_reservations(session: RetryClient, room_type_id: int) -> 
     #TODO 공휴일 지원안됨
 
     Args:
-        retry_client (RetryClient): 세션 객체
+        session (RetryClient): 세션 객체
+        room_type_id (int): 룸 타입 번호
+
 
     Returns:
         dict: 모든 날짜 모든 세미나 실의 예약 현황 객체를 반환 합니다.
@@ -141,7 +168,6 @@ async def get_all_date_reservations(session: RetryClient, room_type_id: int) -> 
         current_date = now_date + datetime.timedelta(
             days=next(day_diff)
         )  # 하루 씩 이동
-        print(current_date)
         day = current_date.weekday()  # 요일 추출
         if (
             day > HOLIDAY
@@ -155,31 +181,24 @@ async def get_all_date_reservations(session: RetryClient, room_type_id: int) -> 
         tasks.append(task)
         available_day_count += 1
 
-    results = create_results(await asyncio.gather(*tasks, return_exceptions=True))
+    results = create_results(await asyncio.gather(*tasks))
+
     return results
 
 
-def create_results(
-    reservations: list[DateReservations | BaseException],
-) -> dict:
-    results = {}
-    for reserv in reservations:
-        if isinstance(reserv, DateReservations):
-            results[reserv.date] = reserv.data
-    return results
+# 테스트 용
+from env import *
 
 
-async def get_cache_data(token: str):
+async def get_cache_data():
     # date = "2024-04-18"  # 조회 날짜
     room_type_id = 5
-    session = await create_logined_session(token)
+    session = await create_logined_session(STUDENT_ID, USAINT_SECRET)
     # res = await get_date_reservations(session, room_type_id, date)
     res = await get_all_date_reservations(session, room_type_id)
-    print(res)
     await session.close()
     return res
 
 
 if __name__ == "__main__":
-    token = "uf4asg5stjdt1das3h54m0ivo9kmulv3"
-    asyncio.run(get_cache_data(token))
+    print(asyncio.run(get_cache_data()))
