@@ -1,5 +1,6 @@
 import asyncio
 import json
+import traceback
 
 import boto3
 import json
@@ -37,7 +38,7 @@ async def update_cache(room_type_id: int) -> dict | None:
                 return cache_data
 
             except Exception:  # 요청이나 응답에 문제가 발생하는 경우
-                await session.close()
+                print(traceback.format_exc())
 
 
 def put_cache_s3(cache: dict):

@@ -44,7 +44,7 @@ async def create_logined_session(
 
     session = aiohttp.ClientSession(
         base_url="https://oasis.ssu.ac.kr",
-        timeout=aiohttp.ClientTimeout(total=10),
+        timeout=aiohttp.ClientTimeout(total=3),
         raise_for_status=True,
     )
     login_url = "/pyxis-api/api/login"  # 로그인 api
@@ -59,24 +59,19 @@ async def create_logined_session(
         token = tokens.pop()
 
     else:
-        try:
-            async with session.post(login_url, json=payload) as resp:
-                if resp is None:
-                    raise ValueError("Incorrect Response")
-                json_res = await resp.json()  # 토큰 추출
+        async with session.post(login_url, json=payload) as resp:
+            if resp is None:
+                raise ValueError("Incorrect Response")
+            json_res = await resp.json()  # 토큰 추출
 
-            assert json_res["success"]  # 로그인 성공 확인
-            token = json_res["data"]["accessToken"]
-
-        except AssertionError:
-            await session.close()
-            raise AssertionError("Login Failed")
+        assert json_res["success"], "Login Failed"  # 로그인 성공 확인
+        token = json_res["data"]["accessToken"]
 
     headers = {
         "Accept": "application/json, text/plain, */*",
         "pyxis-auth-token": token,
     }
-
+    print(token)
     session.headers.update(headers)
     tokens.append(token)
     return session
