@@ -38,7 +38,7 @@ class DateReservations:
 
 def parse_reserved_times(
     room_time_lines: list,
-):
+) -> list[tuple]:
     begin_hour = None  # 예약 시작 시간
     reserved_times = []
     for time_line in room_time_lines:
@@ -75,17 +75,18 @@ def parse_resravtions(room_type_id: int, date: str, response: dict) -> DateReser
 
     """
 
-    room_reservations = response["data"]["list"]
+    room_reservations: list = response["data"]["list"]  # 예약 정보
     date_reservations = DateReservations(room_type_id=room_type_id, date=date)
-    hope_date = room_reservations[0].get("hopeDate")
+    hope_date = room_reservations[0].get("hopeDate")  # 예약 희망 일
+
     if hope_date:
         for room in room_reservations:
-            is_chargeable = room["isChargeable"]
+            is_chargeable: bool = room["isChargeable"]  # 예약 가능 여부
             if not is_chargeable:
                 continue
             room_id: int = room["id"]
             room_time_lines: list = room["timeLine"]
-            reserved_times = parse_reserved_times(room_time_lines)
+            reserved_times: list[tuple] = parse_reserved_times(room_time_lines)
             date_reservations.data[room_id] = reserved_times
     else:
         date_reservations.is_open = False
@@ -120,7 +121,7 @@ async def get_date_reservations(
         return date_reservations
 
     except AssertionError as e:
-        raise KeyError(
+        raise AssertionError(
             f"Bad token in response date:{date} room_type:{room_type_id} {str(e)}"
         )
 
@@ -212,7 +213,6 @@ async def get_cache_data():
     # date = "2024-04-18"  # 조회 날짜
     room_type_id = 5
     session = await create_logined_session(STUDENT_ID, USAINT_SECRET, [])
-    # res = await get_date_reservations(session, room_type_id, date)
     res = await get_all_date_reservations(session, room_type_id)
     await session.close()
     return res

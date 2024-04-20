@@ -51,15 +51,19 @@ async def read_response(response: aiohttp.ClientResponse) -> dict:
         raise AssertionError("Token expired")
 
 
-async def refresh_login_session(tokens: list):
+async def refresh_login_session(tokens: list) -> RetryClient:
     session = None
     for _ in range(3):
         with suppress(AssertionError):
             session = await create_logined_session(
                 STUDENT_ID, USAINT_SECRET, tokens
             )  # 로그인 세션 생성
-        if session:
-            break
+            return session
+
+    if session is None:
+        print("Login failed")
+        raise AssertionError("Login Failed")
+
     return session
 
 

@@ -27,10 +27,6 @@ async def update_cache(room_type_id: int) -> list[dict] | None:
     """
 
     session = await refresh_login_session(tokens)
-
-    if session is None:
-        raise AssertionError("Login Failed")
-
     async with session:
         try:
             cache_data: list[dict] = await get_all_date_reservations(
@@ -85,14 +81,23 @@ def handler(event: dict, context: dict) -> dict:
             put_cache_s3({"reservation": res})
         response = create_response(200, json.dumps(res))
 
-        global tokens
-        tokens[0] = "ofvmjhurg9afr8j2sh5lsb035u0kdms8"
+        # global tokens
+        # tokens[0] = "ofvmjhurg9afr8j2sh5lsb035u0kdms8"
 
     except AssertionError as e:
-        response = create_response(401, json.dumps({"data": str(e), "log": str(e)}))
+        response = create_response(
+            401, json.dumps({"data": str(e), "log": str(e.__traceback__)})
+        )
 
     except Exception as e:
-        response = create_response(500, json.dumps({"data": str(e), "log": str(e)}))
+        response = create_response(
+            500, json.dumps({"data": str(e), "log": str(traceback.format_exc())})
+        )
 
     finally:
         return response
+
+
+if __name__ == "__main__":
+    res = asyncio.run(update_cache(1))  # 예약 현황 조회
+    print(res)
