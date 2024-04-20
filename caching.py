@@ -116,18 +116,18 @@ async def get_date_reservations(
     """
     try:
         response = await call_reservation_api(session, room_type_id, date)
-        print(response)
         date_reservations = parse_resravtions(room_type_id, date, response)
         return date_reservations
 
-    except ValueError:
-        raise ValueError(f"Bad request date:{date} room_type:{room_type_id}")
+    except AssertionError as e:
+        raise KeyError(
+            f"Bad token in response date:{date} room_type:{room_type_id} {str(e)}"
+        )
 
-    except TypeError:
-        raise TypeError(f"Bad response date:{date} room_type:{room_type_id}")
-
-    except KeyError:
-        raise KeyError(f"Bad key in parse date:{date} room_type:{room_type_id}")
+    except KeyError as e:
+        raise KeyError(
+            f"Bad key in parse response date:{date} room_type:{room_type_id} {str(e)}"
+        )
 
 
 def create_results(
@@ -211,7 +211,7 @@ from env import *
 async def get_cache_data():
     # date = "2024-04-18"  # 조회 날짜
     room_type_id = 5
-    session = await create_logined_session(STUDENT_ID, USAINT_SECRET)
+    session = await create_logined_session(STUDENT_ID, USAINT_SECRET, [])
     # res = await get_date_reservations(session, room_type_id, date)
     res = await get_all_date_reservations(session, room_type_id)
     await session.close()

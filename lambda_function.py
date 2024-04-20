@@ -5,14 +5,15 @@ import traceback
 import boto3
 import json
 
-from api import create_logined_session
+from env import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION_NAME, CACHE_BUCKET
+from api import refresh_login_session
 from caching import get_all_date_reservations
-from env import *
+
 
 tokens = []
 
 
-async def update_cache(room_type_id: int) -> dict | None:
+async def update_cache(room_type_id: int) -> list[dict] | None:
     """
     람다를 따뜻하게 유지해 세션을 최대한 재활용 합니다.
     세션이 만료된 경우에만 로그인을 재시도 합니다.
@@ -24,21 +25,21 @@ async def update_cache(room_type_id: int) -> dict | None:
     Returns:
         dict:
     """
-    cache_data = {}
 
-    for _ in range(3):  # 최대 3번 재시도
-        session = await create_logined_session(
-            STUDENT_ID, USAINT_SECRET, tokens
-        )  # 로그인 세션 생성
-        async with session:
-            try:
-                cache_data = await get_all_date_reservations(
-                    session, room_type_id
-                )  # 예약 현황 추출
-                return cache_data
+    session = await refresh_login_session(tokens)
 
-            except Exception:  # 요청이나 응답에 문제가 발생하는 경우
-                print(traceback.format_exc())
+    if session is None:
+        raise AssertionError("Login Failed")
+
+    async with session:
+        try:
+            cache_data: list[dict] = await get_all_date_reservations(
+                session, room_type_id
+            )  # 예약 현황 추출
+            return cache_data
+
+        except Exception:  # 요청이나 응답에 문제가 발생하는 경우
+            print(traceback.format_exc())
 
 
 def put_cache_s3(cache: dict):
@@ -81,18 +82,17 @@ def handler(event: dict, context: dict) -> dict:
         room_type_id = int(room_type_id)
         res = asyncio.run(update_cache(room_type_id))  # 예약 현황 조회
         if res:
-            put_cache_s3(res)
-        response = create_response(200, json.dumps({"data": res}))
+            put_cache_s3({"reservation": res})
+        response = create_response(200, json.dumps(res))
+
+        global tokens
+        tokens[0] = "ofvmjhurg9afr8j2sh5lsb035u0kdms8"
 
     except AssertionError as e:
-        response = create_response(
-            401, json.dumps({"data": str(e), "log": e.__traceback__})
-        )
+        response = create_response(401, json.dumps({"data": str(e), "log": str(e)}))
 
     except Exception as e:
-        response = create_response(
-            500, json.dumps({"data": str(e), "log": e.__traceback__})
-        )
+        response = create_response(500, json.dumps({"data": str(e), "log": str(e)}))
 
     finally:
         return response

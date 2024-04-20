@@ -1,7 +1,13 @@
+from contextlib import suppress
+from functools import wraps
+import json
+import typing
+
+
 import aiohttp
 from aiohttp_retry import RetryClient, ExponentialRetry
-from functools import wraps
-import typing
+
+from env import *
 
 
 def create_retry_client(func) -> typing.Callable:
@@ -31,6 +37,32 @@ def create_retry_client(func) -> typing.Callable:
     return wrapper
 
 
+async def read_response(response: aiohttp.ClientResponse) -> dict:
+    try:
+        data = await response.json()
+
+    except aiohttp.ContentTypeError:
+        data = json.loads(await response.text())
+
+    is_success = data.get("success")  # 도서관 api의 자체 응답 코드
+    if is_success:  # 예약 데이터가 존재하는 경우
+        return data
+    else:
+        raise AssertionError("Token expired")
+
+
+async def refresh_login_session(tokens: list):
+    session = None
+    for _ in range(3):
+        with suppress(AssertionError):
+            session = await create_logined_session(
+                STUDENT_ID, USAINT_SECRET, tokens
+            )  # 로그인 세션 생성
+        if session:
+            break
+    return session
+
+
 @create_retry_client
 async def create_logined_session(
     student_id: str, usaint_secret: str, tokens: list
@@ -47,6 +79,7 @@ async def create_logined_session(
         timeout=aiohttp.ClientTimeout(total=3),
         raise_for_status=True,
     )
+
     login_url = "/pyxis-api/api/login"  # 로그인 api
     payload = {
         "loginId": student_id,
@@ -59,16 +92,12 @@ async def create_logined_session(
         token = tokens.pop()
 
     else:
-        async with session.post(login_url, json=payload) as resp:
-            if resp is None:
-                raise ValueError("Incorrect Response")
-            json_res = await resp.json()  # 토큰 추출
-
-        assert json_res["success"], "Login Failed"  # 로그인 성공 확인
-        token = json_res["data"]["accessToken"]
+        async with session.post(login_url, json=payload) as response:
+            data = await read_response(response)
+            token = data["data"]["accessToken"]
 
     headers = {
-        "Accept": "application/json, text/plain, */*",
+        "Accept": "application/json",
         "pyxis-auth-token": token,
     }
 
@@ -82,16 +111,5 @@ async def call_reservation_api(
 ) -> dict:
     url = f"/pyxis-api/1/api/rooms?roomTypeId={room_type_id}&smufMethodCode=PC&hopeDate={date}"
     async with session.get(url) as response:
-        try:
-            response = await response.json()
-            is_success = response.get("success")  # 도서관 api의 자체 응답 코드
-            if is_success:  # 예약 데이터가 존재하는 경우
-                return response
-            else:
-                raise AssertionError("Token expired")
-
-        except aiohttp.ContentTypeError:
-            raise TypeError("Response Type is not valid")
-
-        except Exception as e:
-            raise Exception("Error Occured in call api", str(e))
+        data = await read_response(response)
+    return data
