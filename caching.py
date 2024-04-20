@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 import datetime
 
 from aiohttp_retry import RetryClient
@@ -28,6 +28,7 @@ class DateReservations:
     room_type_id: int
     date: str
     data: dict[int, list[tuple]] = field(default_factory=dict)
+    is_open: bool = True
 
     def __post_init__(self):  # 값 초기화
         self.data = {
@@ -35,7 +36,35 @@ class DateReservations:
         }  # 룸 타입에 맞게 방 번호 초기화
 
 
-def parse_resravtions(room_type_id: int, response: dict) -> DateReservations:
+def parse_reserved_times(
+    room_time_lines: list,
+):
+    begin_hour = None  # 예약 시작 시간
+    reserved_times = []
+    for time_line in room_time_lines:
+        minutes: list[dict] = time_line["minutes"]
+        hour = time_line["hour"]
+        is_reserved = (
+            True
+            if minutes[0]["class"]
+            else False  # 첫번째 시간대만 파악하면 예약 여부를 확인 할 수 있다.
+        )  # 예약 여부 확인
+
+        if is_reserved:  # 현재 예약이 이미 차있는 경우
+            if not begin_hour:
+                begin_hour = hour  # 예약 시작 시간
+
+        elif begin_hour:
+            reserved_times.append((begin_hour, hour))
+            begin_hour = None
+
+    if begin_hour != hour:  # 추가적으로 더 반영할 예약이 존재하는 경우
+        reserved_times.append((begin_hour, hour))
+
+    return reserved_times
+
+
+def parse_resravtions(room_type_id: int, date: str, response: dict) -> DateReservations:
     """
     json 데이터를 파싱해 방 별로 예약이 존재하는 시간 들을 반환합니다.
     (10,13) => 10 ~ 13시까지 예약이 존재
@@ -47,33 +76,19 @@ def parse_resravtions(room_type_id: int, response: dict) -> DateReservations:
     """
 
     room_reservations = response["data"]["list"]
-    hope_date = room_reservations[0]["hopeDate"]  # 조회일자
-    date_reservations = DateReservations(room_type_id=room_type_id, date=hope_date)
-
-    for room in room_reservations:
-        room_id: int = room["id"]
-        room_time_lines = room["timeLine"]
-        begin_hour = None  # 예약 시작 시간
-
-        for time_line in room_time_lines:
-            minutes: list[dict] = time_line["minutes"]
-            hour = time_line["hour"]
-            is_reserved = (
-                True
-                if minutes[0]["class"]
-                else False  # 첫번째 시간대만 파악하면 예약 여부를 확인 할 수 있다.
-            )  # 예약 여부 확인
-
-            if is_reserved:  # 현재 예약이 이미 차있는 경우
-                if not begin_hour:
-                    begin_hour = hour  # 예약 시작 시간
-
-            elif begin_hour:
-                date_reservations.data[room_id].append((begin_hour, hour))  # 예약 끝
-                begin_hour = None
-
-        if begin_hour != hour:  # 추가적으로 더 반영할 예약이 존재하는 경우
-            date_reservations.data[room_id].append((begin_hour, hour))
+    date_reservations = DateReservations(room_type_id=room_type_id, date=date)
+    hope_date = room_reservations[0].get("hopeDate")
+    if hope_date:
+        for room in room_reservations:
+            is_chargeable = room["isChargeable"]
+            if not is_chargeable:
+                continue
+            room_id: int = room["id"]
+            room_time_lines: list = room["timeLine"]
+            reserved_times = parse_reserved_times(room_time_lines)
+            date_reservations.data[room_id] = reserved_times
+    else:
+        date_reservations.is_open = False
 
     return date_reservations
 
@@ -101,7 +116,8 @@ async def get_date_reservations(
     """
     try:
         response = await call_reservation_api(session, room_type_id, date)
-        date_reservations = parse_resravtions(room_type_id, response)
+        print(response)
+        date_reservations = parse_resravtions(room_type_id, date, response)
         return date_reservations
 
     except ValueError:
@@ -116,7 +132,7 @@ async def get_date_reservations(
 
 def create_results(
     reservations: list[DateReservations | BaseException],
-) -> dict:
+) -> list[dict]:
     """
     예약 정보에서 예외를 제거하고 필요한 결과만 반환한다.
     이후 날짜를 키로 하는 딕셔너리 형태의 데이터로 변환해 전송한다.
@@ -127,14 +143,16 @@ def create_results(
     Returns:
         dict: 날짜 별 예약 데이터
     """
-    results = {}
+    results = []
     for reserv in reservations:
         if isinstance(reserv, DateReservations):
-            results[reserv.date] = reserv.data
+            results.append(asdict(reserv))
     return results
 
 
-async def get_all_date_reservations(session: RetryClient, room_type_id: int) -> dict:
+async def get_all_date_reservations(
+    session: RetryClient, room_type_id: int
+) -> list[dict]:
     """
     모든 날짜와 모든 세미나 실의 예약 현황을 조회해 현재의 예약 현황을 반환 합니다.
     예약 조회는 예약 가능일 기준 14일을 조회하며 이후는 조회를 하여도 예약이 불가하기 때문에 조회하지 않습니다.

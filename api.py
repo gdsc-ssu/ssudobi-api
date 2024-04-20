@@ -71,7 +71,7 @@ async def create_logined_session(
         "Accept": "application/json, text/plain, */*",
         "pyxis-auth-token": token,
     }
-    print(token)
+
     session.headers.update(headers)
     tokens.append(token)
     return session
