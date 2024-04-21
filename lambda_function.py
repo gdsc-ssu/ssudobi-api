@@ -1,16 +1,17 @@
 import asyncio
+from contextlib import suppress
 import json
 import traceback
 
 import boto3
 import json
 
-from env import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION_NAME, CACHE_BUCKET
-from api import refresh_login_session
+from env import *
+from api import create_logined_session
 from caching import get_all_date_reservations
 
 
-tokens = []
+token = ""
 
 
 async def update_cache(room_type_id: int) -> list[dict] | None:
@@ -25,17 +26,23 @@ async def update_cache(room_type_id: int) -> list[dict] | None:
     Returns:
         dict:
     """
+    global token
 
-    session = await refresh_login_session(tokens)
-    async with session:
-        try:
-            cache_data: list[dict] = await get_all_date_reservations(
-                session, room_type_id
-            )  # 예약 현황 추출
-            return cache_data
+    for _ in range(3):
+        session = await create_logined_session(STUDENT_ID, USAINT_SECRET, token)
+        async with session:
+            try:
+                cache_data: list[dict] = await get_all_date_reservations(
+                    session, room_type_id
+                )  # 예약 현황 추출
+                token = session._client.headers["pyxis-auth-token"]  # 기존 토큰 재활용
+                return cache_data
 
-        except Exception:  # 요청이나 응답에 문제가 발생하는 경우
-            print(traceback.format_exc())
+            except AssertionError:
+                token = None  # 토큰 리셋
+
+            except Exception:  # 요청이나 응답에 문제가 발생하는 경우
+                print(traceback.format_exc())
 
 
 def put_cache_s3(cache: dict):
@@ -81,12 +88,9 @@ def handler(event: dict, context: dict) -> dict:
             put_cache_s3({"reservation": res})
         response = create_response(200, json.dumps(res))
 
-        # global tokens
-        # tokens[0] = "ofvmjhurg9afr8j2sh5lsb035u0kdms8"
-
     except AssertionError as e:
         response = create_response(
-            401, json.dumps({"data": str(e), "log": str(e.__traceback__)})
+            401, json.dumps({"data": str(e), "log": str(traceback.format_exc())})
         )
 
     except Exception as e:
@@ -100,4 +104,7 @@ def handler(event: dict, context: dict) -> dict:
 
 if __name__ == "__main__":
     res = asyncio.run(update_cache(1))  # 예약 현황 조회
-    print(res)
+    print(token)
+    token = "ofvmjhurg9afr8j2sh5lsb035u0kdms8"
+    res = asyncio.run(update_cache(1))  # 예약 현황 조회
+    print(token)

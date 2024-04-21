@@ -1,4 +1,3 @@
-from contextlib import suppress
 from functools import wraps
 import json
 import typing
@@ -51,25 +50,9 @@ async def read_response(response: aiohttp.ClientResponse) -> dict:
         raise AssertionError("Token expired")
 
 
-async def refresh_login_session(tokens: list) -> RetryClient:
-    session = None
-    for _ in range(3):
-        with suppress(AssertionError):
-            session = await create_logined_session(
-                STUDENT_ID, USAINT_SECRET, tokens
-            )  # 로그인 세션 생성
-            return session
-
-    if session is None:
-        print("Login failed")
-        raise AssertionError("Login Failed")
-
-    return session
-
-
 @create_retry_client
 async def create_logined_session(
-    student_id: str, usaint_secret: str, tokens: list
+    student_id: str, usaint_secret: str, token: str
 ) -> aiohttp.ClientSession:
     """
     로그인을 진행하고 인증 토큰을 발급합니다.
@@ -80,7 +63,7 @@ async def create_logined_session(
 
     session = aiohttp.ClientSession(
         base_url="https://oasis.ssu.ac.kr",
-        timeout=aiohttp.ClientTimeout(total=3),
+        timeout=aiohttp.ClientTimeout(total=5),
         raise_for_status=True,
     )
 
@@ -92,10 +75,7 @@ async def create_logined_session(
         "isMobile": False,
     }
 
-    if len(tokens):
-        token = tokens.pop()
-
-    else:
+    if not token:
         async with session.post(login_url, json=payload) as response:
             data = await read_response(response)
             token = data["data"]["accessToken"]
@@ -106,7 +86,6 @@ async def create_logined_session(
     }
 
     session.headers.update(headers)
-    tokens.append(token)
     return session
 
 
