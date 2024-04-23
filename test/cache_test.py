@@ -1,8 +1,13 @@
+import asyncio
 import logging
 import pytest
 import requests
 import time
 
+from api import create_logined_session
+from case import CASEDICT, SUCCESSICT
+from caching import get_date_reservations, parse_resravtions
+from env import *
 
 logger = logging.getLogger("TestLogger")
 logger.setLevel(logging.DEBUG)  # DEBUG 레벨 이상의 모든 이벤트 기록
@@ -21,6 +26,31 @@ success_handler.setFormatter(formatter)
 # 로거에 핸들러 추가
 logger.addHandler(error_handler)
 logger.addHandler(success_handler)
+
+
+class TestParser:
+    async def run(self, room_type_id: int, date: str):
+        session = await create_logined_session(STUDENT_ID, USAINT_SECRET, [])
+        res = await get_date_reservations(session, room_type_id, date)
+        return res
+
+    @pytest.mark.parametrize(
+        "room_type_id, date",
+        [
+            (1, "2024-04-26"),
+            (5, "2024-04-26"),
+            (1, "2024-04-27"),
+            (5, "2024-04-27"),
+            (1, "2024-04-29"),
+            (5, "2024-04-29"),
+        ],
+    )  # (룸 타입, 날짜)
+    def test_parse(self, room_type_id: int, date: str):
+        response: dict = CASEDICT[date][room_type_id]
+        success_case: dict = SUCCESSICT[date][room_type_id]
+        res = parse_resravtions(room_type_id, date, response)
+        parsed_data = res.data
+        assert parsed_data == success_case, "Result mismatched!"
 
 
 class TestDocker:
