@@ -51,14 +51,14 @@ def parse_reserved_times(
         )  # 예약 여부 확인
 
         if is_reserved:  # 현재 예약이 이미 차있는 경우
-            if not begin_hour:
+            if begin_hour is None:
                 begin_hour = hour  # 예약 시작 시간
 
-        elif begin_hour:
+        elif begin_hour is not None:  # 0시인 경우도 존재
             reserved_times.append((begin_hour, hour))
             begin_hour = None
 
-    if begin_hour != hour:  # 추가적으로 더 반영할 예약이 존재하는 경우
+    if begin_hour and begin_hour != hour:  # 추가적으로 더 반영할 예약이 존재하는 경우
         reserved_times.append((begin_hour, hour))
 
     return reserved_times
