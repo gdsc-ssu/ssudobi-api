@@ -1,7 +1,7 @@
-import asyncio
+import time
+
 import pytest
 import requests
-import time
 
 from api import create_logined_session
 from case import CASEDICT, SUCCESSICT
@@ -41,7 +41,6 @@ class TestParser:
 class TestDocker:
     # URL 및 데이터 설정
     base_url = "http://localhost:9000/2015-03-31/functions/function/invocations"
-    post_data = {"pathParameters": {"room_type_id": "1"}}
 
     # POST 요청을 테스트하는 기능
     def send_post_request(self, url, data):
@@ -56,9 +55,15 @@ class TestDocker:
         total_duration = duration * 60  # 분을 초로 변환
         end_time = time.time() + total_duration
         error_cnt = 0
+        room_types = ("1", "5")
         while time.time() < end_time:
             try:
-                response = self.send_post_request(self.base_url, self.post_data)
+                post_data = {
+                    "pathParameters": {
+                        "room_type_id": room_types[(int(time.time()) % 2)]
+                    }
+                }
+                response = self.send_post_request(self.base_url, post_data)
                 status_code = response.json()["statusCode"]
                 assert status_code not in ERROR_CODES, "Bad Reqeust"
 
