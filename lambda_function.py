@@ -63,7 +63,6 @@ def handler(event: dict, context: dict) -> dict:
     Returns:
         dict: 람다 함수 실행 결과 값
     """
-    response = create_cache(500, {})
     try:
         room_type_id = event.get("room_type_id", "1")
         res = asyncio.run(update_cache(int(room_type_id)))  # 예약 현황 조회
@@ -71,7 +70,8 @@ def handler(event: dict, context: dict) -> dict:
         if res:
             response = create_cache(200, res)
 
-    except Exception:
+    except Exception as e:
+        response = create_cache(500, str(e))
         print(f"error: {traceback.format_exc()}")
 
     finally:
