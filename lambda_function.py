@@ -1,10 +1,8 @@
 import asyncio
 from contextlib import suppress
-import json
+import datetime
 import traceback
 
-import boto3
-import json
 
 from env import *
 from api import create_logined_session
@@ -42,17 +40,14 @@ async def update_cache(room_type_id: int) -> list[dict] | None:
             except AssertionError:  # 인증 오류가 발생한 경우
                 token = None  # 토큰 리셋
 
-            except Exception as e:  # 요청이나 응답에 문제가 발생하는 경우
-                print(traceback.format_exc())
-                raise e
 
-
-def create_response(status_code: str | int, msg: str) -> dict:
+def create_cache(status_code: str | int, body) -> dict:
+    now = datetime.datetime.now()
+    last_cached_time = datetime.datetime.strftime(now, "%Y-%m-%d %H:%M:%S")
     response = {
-        "isBase64Encoded": False,
-        "headers": {"Content-Type": "application/json"},
         "statusCode": status_code,
-        "body": msg,
+        "body": body,
+        "last_cached_time": last_cached_time,
     }
     return response
 
@@ -68,31 +63,24 @@ def handler(event: dict, context: dict) -> dict:
     Returns:
         dict: 람다 함수 실행 결과 값
     """
-    response = create_response(200, "empty")
-
+    response = create_cache(500, {})
     try:
         room_type_id = event.get("room_type_id", "1")
-        room_type_id = int(room_type_id)
-        res = asyncio.run(update_cache(room_type_id))  # 예약 현황 조회
-        response = create_response(200, json.dumps(res))
+        res = asyncio.run(update_cache(int(room_type_id)))  # 예약 현황 조회
 
-    except AssertionError as e:
-        response = create_response(
-            401, json.dumps({"data": str(e), "log": str(traceback.format_exc())})
-        )
+        if res:
+            response = create_cache(200, res)
 
-    except Exception as e:
-        response = create_response(
-            500, json.dumps({"data": str(e), "log": str(traceback.format_exc())})
-        )
+    except Exception:
+        print(f"error: {traceback.format_exc()}")
 
     finally:
         return response
 
 
 if __name__ == "__main__":
-    res = asyncio.run(update_cache(1))  # 예약 현황 조회
-    print(token)
-    token = "ofvmjhurg9afr8j2sh5lsb035u0kdms8"
-    res = asyncio.run(update_cache(1))  # 예약 현황 조회
-    print(token)
+    res = asyncio.run(update_cache(5))  # 예약 현황 조회
+    print(res)
+    # token = "ofvmjhurg9afr8j2sh5lsb035u0kdms8"
+    # res = asyncio.run(update_cache(1))  # 예약 현황 조회
+    # print(token)
