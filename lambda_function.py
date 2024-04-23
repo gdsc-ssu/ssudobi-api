@@ -32,29 +32,19 @@ async def update_cache(room_type_id: int) -> list[dict] | None:
         session = await create_logined_session(STUDENT_ID, USAINT_SECRET, token)
         async with session:
             try:
-                cache_data: list[dict] = await get_all_date_reservations(
-                    session, room_type_id
-                )  # 예약 현황 추출
+                with suppress(TimeoutError):  # 타임아웃인 경우 그냥 다시 진행
+                    cache_data: list[dict] = await get_all_date_reservations(
+                        session, room_type_id
+                    )  # 예약 현황 추출
                 token = session._client.headers["pyxis-auth-token"]  # 기존 토큰 재활용
                 return cache_data
 
-            except AssertionError:
+            except AssertionError:  # 인증 오류가 발생한 경우
                 token = None  # 토큰 리셋
 
-            except Exception:  # 요청이나 응답에 문제가 발생하는 경우
+            except Exception as e:  # 요청이나 응답에 문제가 발생하는 경우
                 print(traceback.format_exc())
-
-
-def put_cache_s3(cache: dict):
-    s3 = boto3.client(
-        "s3",
-        aws_access_key_id=AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-        region_name=AWS_REGION_NAME,
-    )
-    s3.put_object(
-        Bucket=CACHE_BUCKET, Key="cache", Body=json.dumps(cache)
-    )  # 캐시 업데이트
+                raise e
 
 
 def create_response(status_code: str | int, msg: str) -> dict:
@@ -81,11 +71,9 @@ def handler(event: dict, context: dict) -> dict:
     response = create_response(200, "empty")
 
     try:
-        room_type_id = event["pathParameters"].get("room_type_id", "1")
+        room_type_id = event.get("room_type_id", "1")
         room_type_id = int(room_type_id)
         res = asyncio.run(update_cache(room_type_id))  # 예약 현황 조회
-        if res:
-            put_cache_s3({"reservation": res})
         response = create_response(200, json.dumps(res))
 
     except AssertionError as e:
