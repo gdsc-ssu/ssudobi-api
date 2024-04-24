@@ -38,8 +38,7 @@ def create_response(status_code: str | int, msg: str) -> dict:
 def lambda_handler(event: dict, context: dict):
     try:
         rd = redis.Redis(
-            # host="ssudobi-cache-001.96ug1w.0001.apn2.cache.amazonaws.com",
-            host="localhost",
+            host="ssudobi-cache-001.96ug1w.0001.apn2.cache.amazonaws.com",
             port=6379,
             socket_timeout=3,
         )
@@ -64,5 +63,5 @@ def lambda_handler(event: dict, context: dict):
         return response
 
 
-if __name__ == "__main__":
-    lambda_handler({}, {})
+# if __name__ == "__main__":
+# lambda_handler({}, {})
