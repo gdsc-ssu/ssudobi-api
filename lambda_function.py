@@ -46,8 +46,8 @@ def create_cache(status_code: str | int, body) -> dict:
     last_cached_time = datetime.datetime.strftime(now, "%Y-%m-%d %H:%M:%S")
     response = {
         "statusCode": status_code,
-        "body": body,
         "last_cached_time": last_cached_time,
+        "body": body,
     }
     return response
 

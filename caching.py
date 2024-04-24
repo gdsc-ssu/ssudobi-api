@@ -27,8 +27,8 @@ class DateReservations:
 
     room_type_id: int
     date: str
-    data: dict[int, list[tuple]] = field(default_factory=dict)
     is_open: bool = True
+    data: dict[int, list[tuple]] = field(default_factory=dict)
 
     def __post_init__(self):  # 값 초기화
         self.data = {
