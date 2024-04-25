@@ -64,7 +64,8 @@ def handler(event: dict, context: dict) -> dict:
         dict: 람다 함수 실행 결과 값
     """
     try:
-        room_type_id = event.get("room_type_id", "1")
+        room_type_id = event.get("room_type_id")
+        assert room_type_id, "Room type id is missing"
         res = asyncio.run(update_cache(int(room_type_id)))  # 예약 현황 조회
 
         if res:
