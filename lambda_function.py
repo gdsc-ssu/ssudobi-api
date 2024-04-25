@@ -1,45 +1,53 @@
 import asyncio
-import json
-
-import boto3
-import json
-
-from caching import get_cache_data
-from login_session import *
+from contextlib import suppress
+import datetime
+import traceback
 
 
-async def update_cache(student_id: str, password: str) -> dict:
+from env import *
+from api import create_logined_session
+from caching import get_all_date_reservations
+
+
+token = ""
+
+
+async def update_cache(room_type_id: int) -> list[dict] | None:
     """
-    캐싱 로직을 전부 실행해 현재 예약 현황을 반환 합니다.
+    람다를 따뜻하게 유지해 세션을 최대한 재활용 합니다.
+    세션이 만료된 경우에만 로그인을 재시도 합니다.
+    이후 해당 세션을 활용해 캐싱 로직을 수행합니다.
 
     Args:
-        student_number (str): 학번
-        student_name (str): 이름
+        room_type_id (str): 방 번호
 
     Returns:
         dict:
     """
-    session = await get_logined_session(student_id, password)  # 로그인 세션 생성
-    retry_client = await create_retry_client(session)  # 세션에 retry 기능 추가
-    cache_data = await get_cache_data(retry_client)  # 예약 현황 추출
-    await retry_client.close()
+    global token
 
-    return cache_data
+    for _ in range(3):
+        session = await create_logined_session(STUDENT_ID, USAINT_SECRET, token)
+        async with session:
+            try:
+                with suppress(TimeoutError):  # 타임아웃인 경우 그냥 다시 진행
+                    cache_data: list[dict] = await get_all_date_reservations(
+                        session, room_type_id
+                    )  # 예약 현황 추출
+                token = session._client.headers["pyxis-auth-token"]  # 기존 토큰 재활용
+                return cache_data
+
+            except AssertionError:  # 인증 오류가 발생한 경우
+                token = None  # 토큰 리셋
 
 
-def put_cache_s3(cache: dict):
-    s3 = boto3.client("s3")
-    s3.put_object(
-        Bucket="ssudobi-cache", Key="cache", Body=json.dumps(cache)
-    )  # 캐시 업데이트
-
-
-def create_response(status_code: str | int, msg: str) -> dict:
+def create_cache(status_code: str | int, body) -> dict:
+    now = datetime.datetime.now()
+    last_cached_time = datetime.datetime.strftime(now, "%Y-%m-%d %H:%M:%S")
     response = {
-        "isBase64Encoded": False,
-        "headers": {"Content-Type": "application/json"},
         "statusCode": status_code,
-        "body": msg,
+        "last_cached_time": last_cached_time,
+        "body": body,
     }
     return response
 
@@ -55,21 +63,25 @@ def handler(event: dict, context: dict) -> dict:
     Returns:
         dict: 람다 함수 실행 결과 값
     """
-    response = create_response(200, "empty")
-
     try:
-        body = json.loads(event["body"])
-        student_id = body["student_id"]
-        password = body["password"]
-        res = asyncio.run(update_cache(student_id, password))  # 예약 현황 조회
-        put_cache_s3(res)
-        response = create_response(200, json.dumps({"data": res}))
+        room_type_id = event.get("room_type_id")
+        assert room_type_id, "Room type id is missing"
+        res = asyncio.run(update_cache(int(room_type_id)))  # 예약 현황 조회
 
-    except AssertionError as e:
-        response = create_response(401, json.dumps({"data": str(e)}))
+        if res:
+            response = create_cache(200, res)
 
     except Exception as e:
-        response = create_response(500, json.dumps({"data": str(e)}))
+        response = create_cache(500, str(e))
+        print(f"error: {traceback.format_exc()}")
 
     finally:
         return response
+
+
+if __name__ == "__main__":
+    res = asyncio.run(update_cache(5))  # 예약 현황 조회
+    print(res)
+    # token = "ofvmjhurg9afr8j2sh5lsb035u0kdms8"
+    # res = asyncio.run(update_cache(1))  # 예약 현황 조회
+    # print(token)
