@@ -58,20 +58,18 @@ class TestDocker:
         room_types = ("1", "5")
         while time.time() < end_time:
             try:
-                post_data = {
-                    "pathParameters": {
-                        "room_type_id": room_types[(int(time.time()) % 2)]
-                    }
-                }
-                response = self.send_post_request(self.base_url, post_data)
+                payload = {"room_type_id": room_types[(int(time.time()) % 2)]}
+                response = self.send_post_request(self.base_url, payload)
                 status_code = response.json()["statusCode"]
                 assert status_code not in ERROR_CODES, "Bad Reqeust"
-
                 logger.info(f"Success: {response.text}")
                 time.sleep(interval)
 
             except Exception as e:
-                logger.error(f"Error occurs during test: {e}")
+                logger.error(f"{str(e)}, payload {payload}")
                 error_cnt += 1
 
         assert error_cnt == 0, "ERROR OCCURED!"
+
+
+# class TestLambda:
