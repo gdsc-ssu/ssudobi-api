@@ -81,9 +81,9 @@ def parse_resravtions(room_type_id: int, date: str, response: dict) -> DateReser
 
     if hope_date:
         for room in room_reservations:
-            is_chargeable: bool = room["isChargeable"]  # 예약 가능 여부
-            if not is_chargeable:
-                continue
+            # is_chargeable: bool = room["isChargeable"]  # 예약 가능 여부
+            # if not is_chargeable:
+            # continue
             room_id: int = room["id"]
             room_time_lines: list = room["timeLine"]
             reserved_times: list[tuple] = parse_reserved_times(room_time_lines)

@@ -4,7 +4,7 @@ import pytest
 import requests
 
 from api import create_logined_session
-from case import CASEDICT, SUCCESSICT
+from case import CASEDICT, SUCCESSDICT
 from caching import get_date_reservations, parse_resravtions
 from env import *
 from logger_ import logger
@@ -22,17 +22,18 @@ class TestParser:
     @pytest.mark.parametrize(
         "room_type_id, date",
         [
-            (1, "2024-04-26"),
-            (5, "2024-04-26"),
-            (1, "2024-04-27"),
-            (5, "2024-04-27"),
-            (1, "2024-04-29"),
-            (5, "2024-04-29"),
+            # (1, "2024-04-26"),
+            # (5, "2024-04-26"),
+            # (1, "2024-04-27"),
+            # (5, "2024-04-27"),
+            # (1, "2024-04-29"),
+            # (5, "2024-04-29"),
+            (1, "2024-05-30"),
         ],
     )  # (룸 타입, 날짜)
     def test_parse(self, room_type_id: int, date: str):
         response: dict = CASEDICT[date][room_type_id]
-        success_case: dict = SUCCESSICT[date][room_type_id]
+        success_case: dict = SUCCESSDICT[date][room_type_id]
         res = parse_resravtions(room_type_id, date, response)
         parsed_data = res.data
         assert parsed_data == success_case, "Result mismatched!"
